@@ -17,7 +17,7 @@ var ClientName = "helloworld-worker"
 var CadenceService = "cadence-frontend"
 
 func main() {
-	startWorker(buildLogger(), buildCadenceClient())
+	startWorkers(buildLogger(), buildCadenceClient())
 	select {}
 
 }
@@ -53,23 +53,40 @@ func buildCadenceClient() workflowserviceclient.Interface {
 	return workflowserviceclient.New(dispatcher.ClientConfig(CadenceService))
 }
 
-func startWorker(logger *zap.Logger, service workflowserviceclient.Interface) {
+func startWorkers(logger *zap.Logger, service workflowserviceclient.Interface) {
 	// TaskListName identifies set of client workflows, activities, and workers.
 	// It could be your group or client or application name.
 	workerOptions := worker.Options{
 		Logger:       logger,
 		MetricsScope: tally.NewTestScope(TaskListName, map[string]string{}),
 	}
+	// DisableWorkflowWorker: false,
+	// DisableActivityWorker: true,
 
-	worker := worker.New(
+	workerOptions.DisableWorkflowWorker = false
+	workerOptions.Identity = "workflow-worker"
+	workflowWorker := worker.New(
 		service,
 		Domain,
 		TaskListName,
 		workerOptions)
-	err := worker.Start()
+	err := workflowWorker.Start()
 	if err != nil {
 		panic("Failed to start worker")
 	}
 
-	logger.Info("Started Worker.", zap.String("worker", TaskListName))
+	workerOptions.DisableActivityWorker = false
+	workerOptions.DisableWorkflowWorker = true
+	workerOptions.Identity = "activity-worker"
+	activityWorker := worker.New(
+		service,
+		Domain,
+		TaskListName,
+		workerOptions)
+
+	err = activityWorker.Start()
+	if err != nil {
+		panic("Failed to start worker")
+	}
+	logger.Info("Started Workers.", zap.String("worker", TaskListName))
 }
